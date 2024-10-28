@@ -12,15 +12,14 @@ export async function POST(req) {
   try {
     // Collect binary data from the request body
     const buffer = await req.arrayBuffer();
-    const formData = new FormData();
-    formData.append('file', new Blob([buffer]), 'upload.xlsx');
 
-    // Extract the `date_from` parameter from the request URL
+    // Parse the `date_from` and `date_to` parameters
     const { searchParams } = new URL(req.url);
     const date_from = searchParams.get('date_from');
+    const date_to = searchParams.get('date_to');
     
-    if (!formData.get('file') || !date_from) {
-      return NextResponse.json({ error: 'File and date are required' }, { status: 400 });
+    if (!buffer || !date_from || !date_to) { // Validate both dates
+      return NextResponse.json({ error: 'File, start date, and end date are required' }, { status: 400 });
     }
 
     // Read Excel file and extract phone numbers
@@ -28,13 +27,14 @@ export async function POST(req) {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const smartBrokerData = XLSX.utils.sheet_to_json(sheet).map((row) => row.phoneNumber);
 
-    // Fetch FinanceAds data
+    // Fetch FinanceAds data with date_from and date_to parameters
     const params = {
       api_key: process.env.API_KEY,
       program_id: process.env.PROGRAM_ID,
       status: 'all',
       date_type: 'created_at',
       date_from,
+      date_to, // Add the end date to the request
     };
 
     const response = await axios.get(process.env.API_URL, { params });
@@ -74,9 +74,10 @@ export async function POST(req) {
     // Write the workbook to a buffer
     const excelBuffer = XLSX.write(resultWorkbook, { type: 'buffer', bookType: 'xlsx' });
 
-    // Generate a filename with the selected date
-    const formattedDate = date_from.replace(/-/g, ''); // Format the date as YYYYMMDD
-    const fileName = `matched_leads_${formattedDate}.xlsx`;
+    // Generate a filename with the selected dates
+    const formattedDateFrom = date_from.replace(/-/g, '');
+    const formattedDateTo = date_to.replace(/-/g, '');
+    const fileName = `matched_leads_${formattedDateFrom}_to_${formattedDateTo}.xlsx`;
 
     // Send the file as a download response
     return new NextResponse(excelBuffer, {
