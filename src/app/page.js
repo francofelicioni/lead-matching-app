@@ -12,7 +12,7 @@ export default function Home() {
   const [dateTo, setDateTo] = useState('');
   const [dateType, setDateType] = useState('processed_at');
   const [status, setStatus] = useState('open');
-  const [advertisingMaterialId, setAdvertisingMaterialId] = useState(''); // New state
+  const [advertisingMaterialId, setAdvertisingMaterialId] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
