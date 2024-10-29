@@ -1,23 +1,44 @@
+// app/page.js
+
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import Image from 'next/image.js';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const router = useRouter();
   const [file, setFile] = useState(null);
   const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState(''); // New state for end date
+  const [dateTo, setDateTo] = useState('');
+  const [dateType, setDateType] = useState('processed_at');
+  const [status, setStatus] = useState('open');
+  const [advertisingMaterialId, setAdvertisingMaterialId] = useState(''); // New state
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
   const handleDateFromChange = (e) => setDateFrom(e.target.value);
-  const handleDateToChange = (e) => setDateTo(e.target.value); // New handler for end date
+  const handleDateToChange = (e) => setDateTo(e.target.value);
+  const handleDateTypeChange = (e) => setDateType(e.target.value);
+  const handleStatusChange = (e) => setStatus(e.target.value);
+  const handleAdvertisingMaterialIdChange = (e) => setAdvertisingMaterialId(e.target.value);
+
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setDateTo(today);
+  }, []);
+
+  const handleLogout = async () => {
+    // Clear the auth cookie by redirecting to an API route or using cookies API
+    document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
+    router.push('/login'); // Redirect to login page after logout
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !dateFrom || !dateTo) { // Validate end date
-      alert('Please select a file and both dates');
+    if (!file || !dateFrom) {
+      alert('Please select a file and start date');
       return;
     }
 
@@ -27,15 +48,22 @@ export default function Home() {
     try {
       setLoading(true);
 
-      // Send the file along with date_from and date_to as query parameters
-      const response = await axios.post(`/api/leads?date_from=${dateFrom}&date_to=${dateTo}`, file, {
-        headers: {
-          'Content-Type': 'application/octet-stream',
-        },
+      const params = new URLSearchParams({
+        date_from: dateFrom,
+        date_to: dateTo || new Date().toISOString().split('T')[0],
+        date_type: dateType,
+        status,
+      });
+
+      if (advertisingMaterialId) {
+        params.append('advertising_material_id', advertisingMaterialId);
+      }
+
+      const response = await axios.post(`/api/leads?${params.toString()}`, file, {
+        headers: { 'Content-Type': 'application/octet-stream' },
         responseType: 'blob',
       });
 
-      // Trigger file download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -64,6 +92,7 @@ export default function Home() {
         />
       </a>
       <h1 className="text-center text-3xl font-bold mb-6 py-4 text-white">Lead Matching App</h1>
+      <button onClick={handleLogout} className="text-sm text-gray-200 hover:underline mb-4">Logout</button>
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4 w-full max-w-md">
         <div>
           <label className="block text-gray-700 font-medium mb-2" htmlFor="file">Select Excel File</label>
@@ -86,12 +115,44 @@ export default function Home() {
           />
         </div>
         <div>
-          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateTo">Select End Date</label>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateTo">Select End Date (optional)</label>
           <input
             type="date"
             value={dateTo}
             onChange={handleDateToChange}
-            required
+            className="w-full border border-gray-300 rounded-md p-2"
+          />
+        </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select Date Type</label>
+          <select
+            value={dateType}
+            onChange={handleDateTypeChange}
+            className="w-full border border-gray-300 rounded-md p-2"
+          >
+            <option value="created_at">Created At</option>
+            <option value="processed_at">Processed At</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="status">Select Status</label>
+          <select
+            value={status}
+            onChange={handleStatusChange}
+            className="w-full border border-gray-300 rounded-md p-2"
+          >
+            <option value="all">All</option>
+            <option value="open">Open</option>
+            <option value="canceled">Cancelled</option>
+            <option value="confirmed">Confirmed</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="advertisingMaterialId">Advertising Material ID (optional)</label>
+          <input
+            type="text"
+            value={advertisingMaterialId}
+            onChange={handleAdvertisingMaterialIdChange}
             className="w-full border border-gray-300 rounded-md p-2"
           />
         </div>
