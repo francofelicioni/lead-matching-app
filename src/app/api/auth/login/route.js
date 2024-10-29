@@ -13,7 +13,7 @@ export async function POST(req) {
     cookies().set('auth-token', authToken, {
       httpOnly: true,
       secure: envs.NODE_ENV === 'production',
-      path: '/', // Ensure the cookie is accessible site-wide
+      path: '/',
       maxAge: 60 * 60 * 24, // 1 day
     });
 
