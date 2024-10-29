@@ -1,5 +1,3 @@
-// app/page.js
-
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -29,11 +27,11 @@ export default function Home() {
     setDateTo(today);
   }, []);
 
-  const handleLogout = async () => {
-    // Clear the auth cookie by redirecting to an API route or using cookies API
+  const handleLogout = () => {
     document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
-    router.push('/login'); // Redirect to login page after logout
+    router.push('/login');
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -92,7 +90,6 @@ export default function Home() {
         />
       </a>
       <h1 className="text-center text-3xl font-bold mb-6 py-4 text-white">Lead Matching App</h1>
-      <button onClick={handleLogout} className="text-sm text-gray-200 hover:underline mb-4">Logout</button>
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4 w-full max-w-md">
         <div>
           <label className="block text-gray-700 font-medium mb-2" htmlFor="file">Select Excel File</label>
@@ -165,6 +162,9 @@ export default function Home() {
           {loading ? 'Processing...' : 'Download Matched Leads'}
         </button>
       </form>
+      <div className="text-center mt-8"> 
+        <button onClick={handleLogout} className="text-sm text-gray-200 hover:underline mb-4">Logout</button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
+import envs from '@/config/envConfig.js';
 
 export const config = {
   api: {
@@ -28,8 +29,8 @@ export async function POST(req) {
     const smartBrokerData = XLSX.utils.sheet_to_json(sheet).map((row) => row.phoneNumber);
 
     const params = {
-      api_key: process.env.API_KEY,
-      program_id: process.env.PROGRAM_ID,
+      api_key: envs.API_KEY,
+      program_id: envs.PROGRAM_ID,
       status,
       date_type,
       date_from,
@@ -40,7 +41,7 @@ export async function POST(req) {
       params.advertising_material_id = advertising_material_id;
     }
 
-    const response = await axios.get(process.env.API_URL, { params });
+    const response = await axios.get(envs.API_URL, { params });
     const financeAdsData = response.data.data.leads;
 
     const matchedLeads = financeAdsData
