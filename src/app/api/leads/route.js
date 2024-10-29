@@ -47,7 +47,9 @@ export async function POST(req) {
     const matchedLeads = financeAdsData
       .filter((lead) => lead.customer?.phone_number && smartBrokerData.includes(lead.customer.phone_number))
       .map((lead) => ({
-        customer_phone_number: lead.customer?.phone_number,
+        customer_phone_number: lead.customer?.phone_number?.startsWith('+49')
+          ? lead.customer.phone_number.replace('+49', '')
+          : lead.customer?.phone_number,
         created_at: lead.created_at,
         processed_at: lead.processed_at,
         clicked_at: lead.clicked_at,
