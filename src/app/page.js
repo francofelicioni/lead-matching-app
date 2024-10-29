@@ -27,11 +27,14 @@ export default function Home() {
     setDateTo(today);
   }, []);
 
-  const handleLogout = () => {
-    document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
-    router.push('/login');
+  const handleLogout = async () => {
+    try {
+      await axios.post('/api/auth/logout');
+      router.push('/login');
+    } catch (err) {
+      console.error('Error logging out:', err);
+    }
   };
-
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -121,7 +124,7 @@ export default function Home() {
           />
         </div>
         <div>
-          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select Date Type</label>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select by which date data is filtered </label>
           <select
             value={dateType}
             onChange={handleDateTypeChange}
@@ -162,8 +165,13 @@ export default function Home() {
           {loading ? 'Processing...' : 'Download Matched Leads'}
         </button>
       </form>
-      <div className="text-center mt-8"> 
-        <button onClick={handleLogout} className="text-sm text-gray-200 hover:underline mb-4">Logout</button>
+      <div className="text-center mt-8">
+        <button
+          onClick={handleLogout}
+          className="w-full text-white font-bold px-2.5 py-1 rounded-md hover:bg-red-600 transition-colors duration-500"
+        >
+          Logout
+        </button>
       </div>
     </div>
   );
