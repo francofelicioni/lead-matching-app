@@ -26,7 +26,7 @@ export async function POST(req) {
 
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const smartBrokerData = XLSX.utils.sheet_to_json(sheet).map((row) => row.phoneNumber);
+    const smartBrokerData = XLSX.utils.sheet_to_json(sheet).map((row) => row.phoneNumber?.replace(/^\+/, ''));
 
     const params = {
       api_key: envs.API_KEY,
@@ -45,11 +45,12 @@ export async function POST(req) {
     const financeAdsData = response.data.data.leads;
 
     const matchedLeads = financeAdsData
-      .filter((lead) => lead.customer?.phone_number && smartBrokerData.includes(lead.customer.phone_number))
+      .filter((lead) => {
+        const phoneNumber = lead.customer?.phone_number?.replace(/^\+/, '');
+        return phoneNumber && smartBrokerData.includes(phoneNumber);
+      })
       .map((lead) => ({
-        customer_phone_number: lead.customer?.phone_number?.startsWith('+49')
-          ? lead.customer.phone_number.replace('+49', '')
-          : lead.customer?.phone_number,
+        customer_phone_number: lead.customer?.phone_number,
         created_at: lead.created_at,
         processed_at: lead.processed_at,
         clicked_at: lead.clicked_at,
@@ -70,6 +71,7 @@ export async function POST(req) {
         commission_type: lead.commission?.type,
         status: lead.status,
       }));
+
 
     const resultWorkbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
