@@ -26,7 +26,29 @@ export async function POST(req) {
 
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const smartBrokerData = XLSX.utils.sheet_to_json(sheet).map((row) => row.phoneNumber?.replace(/^\+/, ''));
+    
+    // Identify phone number column
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const headerRow = data[0];
+    const phoneColumnIndex = headerRow.findIndex(header => 
+      ["phone_number", "phoneNumber", "phone number", "Phone Number", "PHONE NUMBER"].includes(header)
+    );
+
+    if (phoneColumnIndex === -1) {
+      return NextResponse.json({ error: 'Phone number column not found' }, { status: 400 });
+    }
+
+    // Extract and normalize phone numbers
+    const smartBrokerData = data.slice(1).map(row => {
+      let phoneNumber = row[phoneColumnIndex];
+      if (phoneNumber && typeof phoneNumber === 'number') {
+        phoneNumber = phoneNumber.toString(); // Convert numbers to strings if necessary
+      }
+      if (phoneNumber && !phoneNumber.startsWith('+')) {
+        phoneNumber = `+${phoneNumber}`; // Add '+' if missing
+      }
+      return phoneNumber;
+    }).filter(phone => phone); // Filter out any empty or undefined phone numbers
 
     const params = {
       api_key: envs.API_KEY,
@@ -44,13 +66,16 @@ export async function POST(req) {
     const response = await axios.get(envs.API_URL, { params });
     const financeAdsData = response.data.data.leads;
 
+    // Filter matched leads with normalized phone numbers
     const matchedLeads = financeAdsData
       .filter((lead) => {
-        const phoneNumber = lead.customer?.phone_number?.replace(/^\+/, '');
-        return phoneNumber && smartBrokerData.includes(phoneNumber);
+        const customerPhoneNumber = lead.customer?.phone_number;
+        return customerPhoneNumber && smartBrokerData.includes(customerPhoneNumber);
       })
       .map((lead) => ({
-        customer_phone_number: lead.customer?.phone_number,
+        customer_phone_number: lead.customer?.phone_number?.startsWith('+49')
+          ? lead.customer.phone_number.replace('+49', '')
+          : lead.customer?.phone_number,
         created_at: lead.created_at,
         processed_at: lead.processed_at,
         clicked_at: lead.clicked_at,
@@ -71,7 +96,6 @@ export async function POST(req) {
         commission_type: lead.commission?.type,
         status: lead.status,
       }));
-
 
     const resultWorkbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
