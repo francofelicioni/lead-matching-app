@@ -64,38 +64,46 @@ export async function POST(req) {
     }
 
     const response = await axios.get(envs.API_URL, { params });
-    const financeAdsData = response.data.data.leads;
+    let financeAdsData = response.data.data.leads;
 
-    // Filter matched leads with normalized phone numbers
-    const matchedLeads = financeAdsData
-      .filter((lead) => {
-        const customerPhoneNumber = lead.customer?.phone_number;
-        return customerPhoneNumber && smartBrokerData.includes(customerPhoneNumber);
-      })
-      .map((lead) => ({
-        customer_phone_number: lead.customer?.phone_number?.startsWith('+49')
-          ? lead.customer.phone_number.replace('+49', '')
-          : lead.customer?.phone_number,
-        created_at: lead.created_at,
-        processed_at: lead.processed_at,
-        clicked_at: lead.clicked_at,
-        customer_browser: lead.customer?.browser,
-        customer_email_address: lead.customer?.email_address,
-        order_id: lead.order?.id,
-        order_value: lead.order?.value,
-        affiliate_id: lead.affiliate?.id,
-        affiliate_company: lead.affiliate?.company_name,
-        sub_id: lead.affiliate?.sub_id,
-        adspace_id: lead.adspace?.id,
-        adspace_name: lead.adspace?.name,
-        advertising_material_id: lead.advertising_material?.id,
-        advertising_material_type: lead.advertising_material?.type,
-        added_later: lead.added_later,
-        commission_value: lead.commission?.value,
-        commission_currency: lead.commission?.currency,
-        commission_type: lead.commission?.type,
-        status: lead.status,
-      }));
+    // Sort data by `created_at` or relevant date to ensure most recent entry appears last
+    financeAdsData = financeAdsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Filter matched leads with unique phone numbers, keeping the most recent match
+    const uniqueMatchedLeads = new Map();
+
+    financeAdsData.forEach((lead) => {
+      const customerPhoneNumber = lead.customer?.phone_number;
+      if (customerPhoneNumber && smartBrokerData.includes(customerPhoneNumber)) {
+        // Map keeps only the latest entry (as entries are processed from most recent to oldest)
+        uniqueMatchedLeads.set(customerPhoneNumber, {
+          customer_phone_number: customerPhoneNumber.startsWith('+49')
+            ? customerPhoneNumber.replace('+49', '')
+            : customerPhoneNumber,
+          created_at: lead.created_at,
+          processed_at: lead.processed_at,
+          clicked_at: lead.clicked_at,
+          customer_browser: lead.customer?.browser,
+          customer_email_address: lead.customer?.email_address,
+          order_id: lead.order?.id,
+          order_value: lead.order?.value,
+          affiliate_id: lead.affiliate?.id,
+          affiliate_company: lead.affiliate?.company_name,
+          sub_id: lead.affiliate?.sub_id,
+          adspace_id: lead.adspace?.id,
+          adspace_name: lead.adspace?.name,
+          advertising_material_id: lead.advertising_material?.id,
+          advertising_material_type: lead.advertising_material?.type,
+          added_later: lead.added_later,
+          commission_value: lead.commission?.value,
+          commission_currency: lead.commission?.currency,
+          commission_type: lead.commission?.type,
+          status: lead.status,
+        });
+      }
+    });
+
+    const matchedLeads = Array.from(uniqueMatchedLeads.values());
 
     const resultWorkbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
