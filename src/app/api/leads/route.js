@@ -19,36 +19,34 @@ export async function POST(req) {
     const date_type = searchParams.get('date_type') || 'processed_at';
     const status = searchParams.get('status') || 'open';
     const advertising_material_id = searchParams.get('advertising_material_id');
+    const use_phone = searchParams.get('use_phone') === 'true';
+    const use_email = searchParams.get('use_email') === 'true';
 
-    if (!buffer || !date_from) {
-      return NextResponse.json({ error: 'File and start date are required' }, { status: 400 });
+    if (!buffer || !date_from || (!use_phone && !use_email)) {
+      return NextResponse.json({ error: 'File, start date, and at least one matching option are required' }, { status: 400 });
     }
 
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    
-    // Identify phone number column
     const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     const headerRow = data[0];
-    const phoneColumnIndex = headerRow.findIndex(header => 
+
+    // Identify phone and email columns
+    const phoneColumnIndex = headerRow.findIndex(header =>
       ["phone_number", "phoneNumber", "phone number", "Phone Number", "PHONE NUMBER"].includes(header)
     );
+    const emailColumnIndex = headerRow.findIndex(header =>
+      ["email", "Email", "EMAIL", "email_address", "Email Address", "EMAIL ADDRESS"].includes(header)
+    );
 
-    if (phoneColumnIndex === -1) {
-      return NextResponse.json({ error: 'Phone number column not found' }, { status: 400 });
+    if (use_phone && phoneColumnIndex === -1 && use_email && emailColumnIndex === -1) {
+      return NextResponse.json({ error: 'Neither phone number nor email columns were found' }, { status: 400 });
     }
 
-    // Extract and normalize phone numbers
-    const smartBrokerData = data.slice(1).map(row => {
-      let phoneNumber = row[phoneColumnIndex];
-      if (phoneNumber && typeof phoneNumber === 'number') {
-        phoneNumber = phoneNumber.toString(); // Convert numbers to strings if necessary
-      }
-      if (phoneNumber && !phoneNumber.startsWith('+')) {
-        phoneNumber = `+${phoneNumber}`; // Add '+' if missing
-      }
-      return phoneNumber;
-    }).filter(phone => phone); // Filter out any empty or undefined phone numbers
+    const smartBrokerData = data.slice(1).map(row => ({
+      phoneNumber: phoneColumnIndex !== -1 ? row[phoneColumnIndex]?.toString() : null,
+      email: emailColumnIndex !== -1 ? row[emailColumnIndex] : null,
+    }));
 
     const params = {
       api_key: envs.API_KEY,
@@ -66,25 +64,26 @@ export async function POST(req) {
     const response = await axios.get(envs.API_URL, { params });
     let financeAdsData = response.data.data.leads;
 
-    // Sort data by `created_at` or relevant date to ensure most recent entry appears last
     financeAdsData = financeAdsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Filter matched leads with unique phone numbers, keeping the most recent match
     const uniqueMatchedLeads = new Map();
 
     financeAdsData.forEach((lead) => {
       const customerPhoneNumber = lead.customer?.phone_number;
-      if (customerPhoneNumber && smartBrokerData.includes(customerPhoneNumber)) {
-        // Map keeps only the latest entry (as entries are processed from most recent to oldest)
-        uniqueMatchedLeads.set(customerPhoneNumber, {
-          customer_phone_number: customerPhoneNumber.startsWith('+49')
-            ? customerPhoneNumber.replace('+49', '')
-            : customerPhoneNumber,
+      const customerEmail = lead.customer?.email_address;
+
+      const phoneMatch = use_phone && customerPhoneNumber && smartBrokerData.some(data => data.phoneNumber === customerPhoneNumber);
+      const emailMatch = use_email && customerEmail && smartBrokerData.some(data => data.email === customerEmail);
+
+      if (phoneMatch || emailMatch) {
+        const key = phoneMatch ? customerPhoneNumber : customerEmail;
+        uniqueMatchedLeads.set(key, {
+          customer_phone_number: customerPhoneNumber?.startsWith('+49') ? customerPhoneNumber.replace('+49', '') : customerPhoneNumber,
+          customer_email_address: customerEmail,
           created_at: lead.created_at,
           processed_at: lead.processed_at,
           clicked_at: lead.clicked_at,
           customer_browser: lead.customer?.browser,
-          customer_email_address: lead.customer?.email_address,
           order_id: lead.order?.id,
           order_value: lead.order?.value,
           affiliate_id: lead.affiliate?.id,

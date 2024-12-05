@@ -13,6 +13,8 @@ export default function Home() {
   const [dateType, setDateType] = useState('processed_at');
   const [status, setStatus] = useState('open');
   const [advertisingMaterialId, setAdvertisingMaterialId] = useState('');
+  const [usePhone, setUsePhone] = useState(true); // Default to phone matching
+  const [useEmail, setUseEmail] = useState(false); // Default email matching off
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
@@ -38,8 +40,8 @@ export default function Home() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !dateFrom) {
-      alert('Please select a file and start date');
+    if (!file || !dateFrom || (!usePhone && !useEmail)) {
+      alert('Please select a file, start date, and at least one matching option');
       return;
     }
 
@@ -54,6 +56,8 @@ export default function Home() {
         date_to: dateTo || new Date().toISOString().split('T')[0],
         date_type: dateType,
         status,
+        use_phone: usePhone, // Pass user selection
+        use_email: useEmail, // Pass user selection
       });
 
       if (advertisingMaterialId) {
@@ -155,6 +159,27 @@ export default function Home() {
             onChange={handleAdvertisingMaterialIdChange}
             className="w-full border border-gray-300 rounded-md p-2"
           />
+        </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">Match Options:</label>
+          <div className="flex space-x-4">
+            <label>
+              <input
+                type="checkbox"
+                checked={usePhone}
+                onChange={(e) => setUsePhone(e.target.checked)}
+              />
+              <span className="ml-2">Match by Phone</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={useEmail}
+                onChange={(e) => setUseEmail(e.target.checked)}
+              />
+              <span className="ml-2">Match by Email</span>
+            </label>
+          </div>
         </div>
         <button
           type="submit"
