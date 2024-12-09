@@ -8,7 +8,6 @@ export const config = {
     bodyParser: false,
   },
 };
-
 export async function POST(req) {
   try {
     const buffer = await req.arrayBuffer();
@@ -33,8 +32,9 @@ export async function POST(req) {
 
     // Identify phone and email columns
     const phoneColumnIndex = headerRow.findIndex(header =>
-      ["phone_number", "phoneNumber", "phone number", "Phone Number", "PHONE NUMBER"].includes(header)
+      ["phone_number", "Phone_Number", "phoneNumber", "phone number", "Phone Number", "PHONE NUMBER", "phone number", "phonenumber", "PHONENUMBER"].includes(header)
     );
+
     const emailColumnIndex = headerRow.findIndex(header =>
       ["email", "Email", "EMAIL", "email_address", "Email Address", "EMAIL ADDRESS"].includes(header)
     );
@@ -43,9 +43,23 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Neither phone number nor email columns were found' }, { status: 400 });
     }
 
+    // Function to normalize scientific notation phone numbers
+    const normalizePhoneNumber = (phoneNumber) => {
+      if (phoneNumber && typeof phoneNumber === 'number') {
+        return phoneNumber.toFixed(0); // Convert number to full string without decimals
+      } else if (phoneNumber && typeof phoneNumber === 'string' && phoneNumber.includes('E+')) {
+        return Number(phoneNumber).toFixed(0); // Convert scientific notation string to full number string
+      }
+      return phoneNumber;
+    };
+
+    // Extract and normalize data for matching
     const smartBrokerData = data.slice(1).map(row => ({
-      phoneNumber: phoneColumnIndex !== -1 ? row[phoneColumnIndex]?.toString() : null,
+      phoneNumber: phoneColumnIndex !== -1 ? normalizePhoneNumber(row[phoneColumnIndex]) : null,
       email: emailColumnIndex !== -1 ? row[emailColumnIndex] : null,
+    })).map(({ phoneNumber, email }) => ({
+      phoneNumber: phoneNumber && !phoneNumber.startsWith('+') ? `+${phoneNumber}` : phoneNumber, // Add '+' if missing
+      email,
     }));
 
     const params = {
