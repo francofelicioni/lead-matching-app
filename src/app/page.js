@@ -10,16 +10,21 @@ export default function Home() {
   const [file, setFile] = useState(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
   const [dateType, setDateType] = useState('processed_at');
   const [status, setStatus] = useState('open');
   const [advertisingMaterialId, setAdvertisingMaterialId] = useState('');
-  const [usePhone, setUsePhone] = useState(true); // Default to phone matching
-  const [useEmail, setUseEmail] = useState(false); // Default email matching off
+  const [usePhone, setUsePhone] = useState(true);
+  const [useEmail, setUseEmail] = useState(false);
+  const [downloadFullData, setDownloadFullData] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
   const handleDateFromChange = (e) => setDateFrom(e.target.value);
   const handleDateToChange = (e) => setDateTo(e.target.value);
+  const handleCreatedFromChange = (e) => setCreatedFrom(e.target.value);
+  const handleCreatedToChange = (e) => setCreatedTo(e.target.value);
   const handleDateTypeChange = (e) => setDateType(e.target.value);
   const handleStatusChange = (e) => setStatus(e.target.value);
   const handleAdvertisingMaterialIdChange = (e) => setAdvertisingMaterialId(e.target.value);
@@ -28,7 +33,6 @@ export default function Home() {
     const today = new Date().toISOString().split('T')[0];
     setDateTo(today);
   }, []);
-
   const handleLogout = async () => {
     try {
       await axios.post('/api/auth/logout');
@@ -40,39 +44,52 @@ export default function Home() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !dateFrom || (!usePhone && !useEmail)) {
-      alert('Please select a file, start date, and at least one matching option');
+
+    const params = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo || new Date().toISOString().split('T')[0],
+      created_from: createdFrom,
+      created_to: createdTo,
+      date_type: dateType,
+      status,
+      use_phone: usePhone,
+      use_email: useEmail,
+      download_full_data: downloadFullData,
+    });
+
+    if (!downloadFullData && (!file || !dateFrom)) {
+      alert('Please select a file and start date for matching, or choose to download full data.');
       return;
     }
 
+    if (advertisingMaterialId) {
+      params.append('advertising_material_id', advertisingMaterialId);
+    }
+
     const formData = new FormData();
-    formData.append('file', file);
+    if (!downloadFullData) {
+      formData.append('file', file);
+    }
 
     try {
       setLoading(true);
 
-      const params = new URLSearchParams({
-        date_from: dateFrom,
-        date_to: dateTo || new Date().toISOString().split('T')[0],
-        date_type: dateType,
-        status,
-        use_phone: usePhone, // Pass user selection
-        use_email: useEmail, // Pass user selection
-      });
-
-      if (advertisingMaterialId) {
-        params.append('advertising_material_id', advertisingMaterialId);
-      }
-
-      const response = await axios.post(`/api/leads?${params.toString()}`, file, {
-        headers: { 'Content-Type': 'application/octet-stream' },
+      const response = await axios.post(`/api/leads?${params.toString()}`, downloadFullData ? null : formData, {
+        headers: { 'Content-Type': downloadFullData ? 'application/json' : 'application/octet-stream' },
         responseType: 'blob',
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
+      const date = new Date();
+      const day = `0${date.getDate()}`.slice(-2);
+      const month = `0${date.getMonth() + 1}`.slice(-2);
+      const year = date.getFullYear();
+      const fileName = downloadFullData
+        ? `finance_ads_full_data_${day}-${month}-${year}.xlsx`
+        : `matched_leads_${day}-${month}-${year}.xlsx`;
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', 'matched_leads.xlsx');
+      link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
@@ -104,7 +121,7 @@ export default function Home() {
             type="file"
             accept=".xlsx, .xls"
             onChange={handleFileChange}
-            required
+            disabled={downloadFullData} // Disable file input if full data is selected
             className="w-full border border-gray-300 rounded-md p-2"
           />
         </div>
@@ -114,12 +131,13 @@ export default function Home() {
             type="date"
             value={dateFrom}
             onChange={handleDateFromChange}
-            required
+            required={!downloadFullData}
+            disabled={downloadFullData}
             className="w-full border border-gray-300 rounded-md p-2"
           />
         </div>
         <div>
-          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateTo">Select End Date (optional)</label>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateTo">Select End Date</label>
           <input
             type="date"
             value={dateTo}
@@ -128,7 +146,25 @@ export default function Home() {
           />
         </div>
         <div>
-          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select by which date data is filtered </label>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="createdFrom">Created From (optional)</label>
+          <input
+            type="date"
+            value={createdFrom}
+            onChange={handleCreatedFromChange}
+            className="w-full border border-gray-300 rounded-md p-2"
+          />
+        </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="createdTo">Created To (optional)</label>
+          <input
+            type="date"
+            value={createdTo}
+            onChange={handleCreatedToChange}
+            className="w-full border border-gray-300 rounded-md p-2"
+          />
+        </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select Date Type</label>
           <select
             value={dateType}
             onChange={handleDateTypeChange}
@@ -181,13 +217,23 @@ export default function Home() {
             </label>
           </div>
         </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">
+            <input
+              type="checkbox"
+              checked={downloadFullData}
+              onChange={(e) => setDownloadFullData(e.target.checked)}
+            />
+            <span className="ml-2">Download Full Data</span>
+          </label>
+        </div>
         <button
           type="submit"
           disabled={loading}
           className={`w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg 
             ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-600'}`}
         >
-          {loading ? 'Processing...' : 'Download Matched Leads'}
+          {loading ? 'Processing...' : 'Download Data'}
         </button>
       </form>
       <div className="text-center mt-8">
