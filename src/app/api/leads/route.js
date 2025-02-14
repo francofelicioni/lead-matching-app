@@ -8,7 +8,6 @@ export const config = {
     bodyParser: false,
   },
 };
-
 export async function POST(req) {
   try {
     const buffer = await req.arrayBuffer();
@@ -19,15 +18,49 @@ export async function POST(req) {
     const date_type = searchParams.get('date_type') || 'processed_at';
     const status = searchParams.get('status') || 'open';
     const advertising_material_id = searchParams.get('advertising_material_id');
-    const user_email = searchParams.get('user_email'); // New field for user email
+    const use_phone = searchParams.get('use_phone') === 'true';
+    const use_email = searchParams.get('use_email') === 'true';
 
-    if (!buffer || !date_from) {
-      return NextResponse.json({ error: 'File and start date are required' }, { status: 400 });
+    if (!buffer || !date_from || (!use_phone && !use_email)) {
+      return NextResponse.json({ error: 'File, start date, and at least one matching option are required' }, { status: 400 });
     }
 
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const smartBrokerData = XLSX.utils.sheet_to_json(sheet);
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const headerRow = data[0];
+
+    // Identify phone and email columns
+    const phoneColumnIndex = headerRow.findIndex(header =>
+      ["phone_number", "Phone_Number", "phoneNumber", "phone number", "Phone Number", "PHONE NUMBER", "phone number", "phonenumber", "PHONENUMBER"].includes(header)
+    );
+
+    const emailColumnIndex = headerRow.findIndex(header =>
+      ["email", "Email", "EMAIL", "email_address", "Email Address", "EMAIL ADDRESS"].includes(header)
+    );
+
+    if (use_phone && phoneColumnIndex === -1 && use_email && emailColumnIndex === -1) {
+      return NextResponse.json({ error: 'Neither phone number nor email columns were found' }, { status: 400 });
+    }
+
+    // Function to normalize scientific notation phone numbers
+    const normalizePhoneNumber = (phoneNumber) => {
+      if (phoneNumber && typeof phoneNumber === 'number') {
+        return phoneNumber.toFixed(0); // Convert number to full string without decimals
+      } else if (phoneNumber && typeof phoneNumber === 'string' && phoneNumber.includes('E+')) {
+        return Number(phoneNumber).toFixed(0); // Convert scientific notation string to full number string
+      }
+      return phoneNumber;
+    };
+
+    // Extract and normalize data for matching
+    const smartBrokerData = data.slice(1).map(row => ({
+      phoneNumber: phoneColumnIndex !== -1 ? normalizePhoneNumber(row[phoneColumnIndex]) : null,
+      email: emailColumnIndex !== -1 ? row[emailColumnIndex] : null,
+    })).map(({ phoneNumber, email }) => ({
+      phoneNumber: phoneNumber && !phoneNumber.startsWith('+') ? `+${phoneNumber}` : phoneNumber, // Add '+' if missing
+      email,
+    }));
 
     const params = {
       api_key: envs.API_KEY,
@@ -43,44 +76,56 @@ export async function POST(req) {
     }
 
     const response = await axios.get(envs.API_URL, { params });
-    const financeAdsData = response.data.data.leads;
+    let financeAdsData = response.data.data.leads;
 
-    // Map leads to include requested fields along with user email
-    const mappedLeads = financeAdsData.map((lead) => ({
-      success: response.data.success,
-      message: response.data.message,
-      created_at: lead.created_at,
-      processed_at: lead.processed_at,
-      clicked_at: lead.clicked_at,
-      order_id: lead.order?.id,
-      order_name: lead.order?.name,
-      order_value: lead.order?.value,
-      affiliate_id: lead.affiliate?.id,
-      affiliate_company: lead.affiliate?.company_name,
-      affiliate_sub_id: lead.affiliate?.sub_id,
-      adspace_id: lead.adspace?.id,
-      adspace_name: lead.adspace?.name,
-      advertising_material_id: lead.advertising_material?.id,
-      advertising_material_type: lead.advertising_material?.type,
-      added_later: lead.added_later,
-      commission_value: lead.commission?.value,
-      commission_currency: lead.commission?.currency,
-      commission_type: lead.commission?.type,
-      status: lead.status,
-      customer_email_address: lead.customer?.email_adress,
-      customer_phone_number: lead.customer?.phone_number,
-      customer_browser: lead.customer?.browser,
-      user_email: user_email || '',
-    }));
+    financeAdsData = financeAdsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    const uniqueMatchedLeads = new Map();
+
+    financeAdsData.forEach((lead) => {
+      const customerPhoneNumber = lead.customer?.phone_number;
+      const customerEmail = lead.customer?.email_address;
+
+      const phoneMatch = use_phone && customerPhoneNumber && smartBrokerData.some(data => data.phoneNumber === customerPhoneNumber);
+      const emailMatch = use_email && customerEmail && smartBrokerData.some(data => data.email === customerEmail);
+
+      if (phoneMatch || emailMatch) {
+        const key = phoneMatch ? customerPhoneNumber : customerEmail;
+        uniqueMatchedLeads.set(key, {
+          customer_phone_number: customerPhoneNumber?.startsWith('+49') ? customerPhoneNumber.replace('+49', '') : customerPhoneNumber,
+          customer_email_address: customerEmail,
+          created_at: lead.created_at,
+          processed_at: lead.processed_at,
+          clicked_at: lead.clicked_at,
+          customer_browser: lead.customer?.browser,
+          order_id: lead.order?.id,
+          order_value: lead.order?.value,
+          affiliate_id: lead.affiliate?.id,
+          affiliate_company: lead.affiliate?.company_name,
+          sub_id: lead.affiliate?.sub_id,
+          adspace_id: lead.adspace?.id,
+          adspace_name: lead.adspace?.name,
+          advertising_material_id: lead.advertising_material?.id,
+          advertising_material_type: lead.advertising_material?.type,
+          added_later: lead.added_later,
+          commission_value: lead.commission?.value,
+          commission_currency: lead.commission?.currency,
+          commission_type: lead.commission?.type,
+          status: lead.status,
+        });
+      }
+    });
+
+    const matchedLeads = Array.from(uniqueMatchedLeads.values());
 
     const resultWorkbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(mappedLeads);
-    XLSX.utils.book_append_sheet(resultWorkbook, worksheet, 'Finance Ads Data');
+    const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
+    XLSX.utils.book_append_sheet(resultWorkbook, worksheet, 'Matched Leads');
 
     const excelBuffer = XLSX.write(resultWorkbook, { type: 'buffer', bookType: 'xlsx' });
     const formattedDateFrom = date_from.replace(/-/g, '');
     const formattedDateTo = date_to.replace(/-/g, '');
-    const fileName = `full_leads_${formattedDateFrom}_to_${formattedDateTo}.xlsx`;
+    const fileName = `matched_leads_${formattedDateFrom}_to_${formattedDateTo}.xlsx`;
 
     return new NextResponse(excelBuffer, {
       headers: {
