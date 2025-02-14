@@ -45,22 +45,31 @@ export async function POST(req) {
 
     // Function to normalize scientific notation phone numbers
     const normalizePhoneNumber = (phoneNumber) => {
-      if (phoneNumber && typeof phoneNumber === 'number') {
-        return phoneNumber.toFixed(0); // Convert number to full string without decimals
-      } else if (phoneNumber && typeof phoneNumber === 'string' && phoneNumber.includes('E+')) {
-        return Number(phoneNumber).toFixed(0); // Convert scientific notation string to full number string
+      if (!phoneNumber) return null;
+
+      // Convert scientific notation
+      if (typeof phoneNumber === 'number' || (typeof phoneNumber === 'string' && phoneNumber.includes('E+'))) {
+        phoneNumber = Number(phoneNumber).toFixed(0);
       }
+
+      // Remove non-numeric characters (except leading '+')
+      phoneNumber = phoneNumber.toString().replace(/[^\d+]/g, '');
+
+      // Ensure leading '+' for international format (assumes missing country code means Germany)
+      if (!phoneNumber.startsWith('+')) {
+        phoneNumber = `+49${phoneNumber}`;
+      }
+
       return phoneNumber;
     };
 
     // Extract and normalize data for matching
-    const smartBrokerData = data.slice(1).map(row => ({
-      phoneNumber: phoneColumnIndex !== -1 ? normalizePhoneNumber(row[phoneColumnIndex]) : null,
-      email: emailColumnIndex !== -1 ? row[emailColumnIndex] : null,
-    })).map(({ phoneNumber, email }) => ({
-      phoneNumber: phoneNumber && !phoneNumber.startsWith('+') ? `+${phoneNumber}` : phoneNumber, // Add '+' if missing
-      email,
-    }));
+    const smartBrokerData = data.slice(1).map(row => {
+      const phoneNumber = phoneColumnIndex !== -1 ? normalizePhoneNumber(row[phoneColumnIndex]) : null;
+      const email = emailColumnIndex !== -1 ? row[emailColumnIndex] : null;
+
+      return { phoneNumber, email };
+    });
 
     const params = {
       api_key: envs.API_KEY,
@@ -78,7 +87,7 @@ export async function POST(req) {
     const response = await axios.get(envs.API_URL, { params });
     let financeAdsData = response.data.data.leads;
 
-    financeAdsData = financeAdsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    financeAdsData.sort((a, b) => a.processed_at.localeCompare(b.processed_at));
 
     const uniqueMatchedLeads = new Map();
 
@@ -86,8 +95,11 @@ export async function POST(req) {
       const customerPhoneNumber = lead.customer?.phone_number;
       const customerEmail = lead.customer?.email_address;
 
-      const phoneMatch = use_phone && customerPhoneNumber && smartBrokerData.some(data => data.phoneNumber === customerPhoneNumber);
-      const emailMatch = use_email && customerEmail && smartBrokerData.some(data => data.email === customerEmail);
+      const phoneMatch = use_phone && customerPhoneNumber && customerPhoneNumber.trim() !== '' &&
+        smartBrokerData.some(data => data.phoneNumber && data.phoneNumber === customerPhoneNumber);
+
+      const emailMatch = use_email && customerEmail && customerEmail.trim() !== '' &&
+        smartBrokerData.some(data => data.email && data.email === customerEmail);
 
       if (phoneMatch || emailMatch) {
         const key = phoneMatch ? customerPhoneNumber : customerEmail;
@@ -134,7 +146,11 @@ export async function POST(req) {
       },
     });
   } catch (error) {
-    console.error('Error processing leads:', error);
-    return NextResponse.json({ error: 'Error processing data' }, { status: 500 });
+    console.error('Error processing leads:', error.response?.data || error.message);
+
+    return NextResponse.json({
+      error: 'Error processing data',
+      details: error.response?.data || error.message
+    }, { status: 500 });
   }
 }
