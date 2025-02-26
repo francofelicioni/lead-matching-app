@@ -11,7 +11,7 @@ export default function Home() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [dateType, setDateType] = useState('processed_at');
-  const [status, setStatus] = useState('open');
+  const [status, setStatus] = useState('confirmed');
   const [advertisingMaterialId, setAdvertisingMaterialId] = useState('');
   const [usePhone, setUsePhone] = useState(true); // Default to phone matching
   const [useEmail, setUseEmail] = useState(false); // Default email matching off
