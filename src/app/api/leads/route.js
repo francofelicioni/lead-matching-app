@@ -10,9 +10,22 @@ export const config = {
   },
 };
 
-// Validate that a phone number is in E.164 format (e.g. +491234567890)
-function isE164(phone) {
-  return /^\+[1-9]\d{1,14}$/.test(phone);
+/**
+ * Normalize a phone number:
+ */
+function normalizePhoneNumber(phone) {
+  if (!phone) return null;
+  let num = String(phone).trim();
+  // Remove common formatting characters
+  num = num.replace(/[\s\-().]/g, '');
+  if (!num.startsWith('+')) {
+    if (num.startsWith('49')) {
+      num = `+${num}`;
+    } else {
+      num = `+49${num}`;
+    }
+  }
+  return num;
 }
 
 export async function POST(req) {
@@ -40,6 +53,7 @@ export async function POST(req) {
     }
 
     // Normalize and map the status value to allowed API values.
+    // The FinanceAds API expects: "open", "confirmed", "cancelled", or "all".
     status = status.toString().toLowerCase();
     if (status === "all") {
       // leave as is
@@ -86,12 +100,11 @@ export async function POST(req) {
       );
     }
 
-    // Extract and filter Excel data (ensuring phone numbers are in E.164 format)
+    // Extract and normalize Excel data
     const excelData = data.slice(1).map(row => {
       const rawPhone = phoneColumnIndex !== -1 ? row[phoneColumnIndex] : null;
-      const phoneNumber = rawPhone && isE164(String(rawPhone).trim())
-        ? String(rawPhone).trim()
-        : null;
+      // Normalize Excel phone numbers (adds '+' if missing)
+      const phoneNumber = rawPhone ? normalizePhoneNumber(rawPhone) : null;
       const email = emailColumnIndex !== -1 ? String(row[emailColumnIndex]).trim() : null;
       return { phoneNumber, email };
     });
@@ -132,17 +145,18 @@ export async function POST(req) {
       );
     }
 
-    // Match leads based on phone and/or email
+    // Match leads based on phone and/or email.
+    // Normalize FinanceAds phone numbers for consistent matching.
     const uniqueMatchedLeads = new Map();
     financeAdsData.forEach(lead => {
-      const customerPhoneNumber = lead.customer?.phone_number?.trim();
+      const customerPhoneNumber = lead.customer?.phone_number;
+      const normalizedCustomerPhone = customerPhoneNumber ? normalizePhoneNumber(customerPhoneNumber) : null;
       const customerEmail = lead.customer?.email_address?.trim();
 
       const phoneMatch =
         use_phone &&
-        customerPhoneNumber &&
-        isE164(customerPhoneNumber) &&
-        excelData.some(d => d.phoneNumber && d.phoneNumber === customerPhoneNumber);
+        normalizedCustomerPhone &&
+        excelData.some(d => d.phoneNumber && d.phoneNumber === normalizedCustomerPhone);
 
       const emailMatch =
         use_email &&
@@ -150,9 +164,9 @@ export async function POST(req) {
         excelData.some(d => d.email && d.email === customerEmail);
 
       if (phoneMatch || emailMatch) {
-        const key = phoneMatch ? customerPhoneNumber : customerEmail;
+        const key = phoneMatch ? normalizedCustomerPhone : customerEmail;
         uniqueMatchedLeads.set(key, {
-          customer_phone_number: customerPhoneNumber,
+          customer_phone_number: normalizedCustomerPhone,
           customer_email_address: customerEmail,
           created_at: lead.created_at,
           processed_at: lead.processed_at,
@@ -186,7 +200,12 @@ export async function POST(req) {
       const message = `No matches were found for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
       worksheet = XLSX.utils.aoa_to_sheet([[message]]);
     } else {
-      worksheet = XLSX.utils.json_to_sheet(matchedLeads);
+      // Generate the sheet from the matched leads
+      let sheetData = XLSX.utils.sheet_to_json(XLSX.utils.json_to_sheet(matchedLeads), { header: 1 });
+      // Prepend a header row with a custom message
+      const headerMessage = `Matches founded for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
+      sheetData.unshift([headerMessage]);
+      worksheet = XLSX.utils.aoa_to_sheet(sheetData);
     }
     XLSX.utils.book_append_sheet(resultWorkbook, worksheet, 'Matched Leads');
 
