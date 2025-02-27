@@ -11,7 +11,7 @@ export default function Home() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [dateType, setDateType] = useState('processed_at');
-  const [status, setStatus] = useState('confirmed');
+  const [status, setStatus] = useState('2');
   const [advertisingMaterialId, setAdvertisingMaterialId] = useState('');
   const [usePhone, setUsePhone] = useState(true); // Default to phone matching
   const [useEmail, setUseEmail] = useState(false); // Default email matching off
@@ -45,9 +45,6 @@ export default function Home() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
       setLoading(true);
 
@@ -56,15 +53,18 @@ export default function Home() {
         date_to: dateTo || new Date().toISOString().split('T')[0],
         date_type: dateType,
         status,
-        use_phone: usePhone, // Pass user selection
-        use_email: useEmail, // Pass user selection
+        use_phone: usePhone,
+        use_email: useEmail,
       });
 
       if (advertisingMaterialId) {
         params.append('advertising_material_id', advertisingMaterialId);
       }
 
-      const response = await axios.post(`/api/leads?${params.toString()}`, file, {
+      // Convert the File object into an ArrayBuffer
+      const fileBuffer = await file.arrayBuffer();
+
+      const response = await axios.post(`/api/leads?${params.toString()}`, fileBuffer, {
         headers: { 'Content-Type': 'application/octet-stream' },
         responseType: 'blob',
       });
@@ -128,7 +128,7 @@ export default function Home() {
           />
         </div>
         <div>
-          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select by which date data is filtered </label>
+          <label className="block text-gray-700 font-medium mb-2" htmlFor="dateType">Select by which date data is filtered</label>
           <select
             value={dateType}
             onChange={handleDateTypeChange}
@@ -146,9 +146,9 @@ export default function Home() {
             className="w-full border border-gray-300 rounded-md p-2"
           >
             <option value="all">All</option>
-            <option value="open">Open</option>
-            <option value="canceled">Cancelled</option>
-            <option value="confirmed">Confirmed</option>
+            <option value="1">Open</option>
+            <option value="2">Confirmed</option>
+            <option value="3">Cancelled</option>
           </select>
         </div>
         <div>
