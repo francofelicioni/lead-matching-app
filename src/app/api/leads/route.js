@@ -2,27 +2,32 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import envs from '@/config/envConfig.js';
+import { Buffer } from 'buffer';
 
 export const config = {
   api: {
     bodyParser: false,
   },
 };
-
+e
+// Validate that a phone number is in E.164 format
 function isE164(phone) {
   return /^\+[1-9]\d{1,14}$/.test(phone);
 }
 
 export async function POST(req) {
   try {
-    const buffer = await req.arrayBuffer();
-    const { searchParams } = new URL(req.url);
+    // Convert incoming ArrayBuffer to a Node Buffer
+    const arrayBuffer = await req.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    console.log("Received file buffer length:", buffer.length);
 
+    // Parse query parameters
+    const { searchParams } = new URL(req.url);
     const date_from = searchParams.get('date_from');
     const date_to = searchParams.get('date_to') || new Date().toISOString().split('T')[0];
     const date_type = searchParams.get('date_type') || 'processed_at';
-    // Default status to 2 (confirmed) using numeric codes: open=1, confirmed=2, canceled=3
-    const status = searchParams.get('status') || '2';
+    let status = searchParams.get('status') || '2'; // default is "2" (Confirmed)
     const advertising_material_id = searchParams.get('advertising_material_id');
     const use_phone = searchParams.get('use_phone') === 'true';
     const use_email = searchParams.get('use_email') === 'true';
@@ -34,28 +39,24 @@ export async function POST(req) {
       );
     }
 
+    // Read the Excel file
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Excel file is empty or invalid' }, { status: 400 });
+    }
+    console.log("Excel rows received:", data.length);
     const headerRow = data[0];
 
+    // Define header variations
     const phoneHeaders = [
-      'phone_number',
-      'Phone_Number',
-      'phoneNumber',
-      'phone number',
-      'Phone Number',
-      'PHONE NUMBER',
-      'phonenumber',
-      'PHONENUMBER',
+      'phone_number', 'Phone_Number', 'phoneNumber', 'phone number',
+      'Phone Number', 'PHONE NUMBER', 'phonenumber', 'PHONENUMBER'
     ];
     const emailHeaders = [
-      'email',
-      'Email',
-      'EMAIL',
-      'email_address',
-      'Email Address',
-      'EMAIL ADDRESS',
+      'email', 'Email', 'EMAIL', 'email_address',
+      'Email Address', 'EMAIL ADDRESS'
     ];
 
     const phoneColumnIndex = headerRow.findIndex(header => phoneHeaders.includes(header));
@@ -68,32 +69,62 @@ export async function POST(req) {
       );
     }
 
-    // Extract and filter phone numbers that are in E.164 format
+    // Extract and filter Excel data (ensuring phone numbers are in E.164 format)
     const excelData = data.slice(1).map(row => {
       const rawPhone = phoneColumnIndex !== -1 ? row[phoneColumnIndex] : null;
-      const phoneNumber = rawPhone && isE164(rawPhone) ? rawPhone : null;
-      const email = emailColumnIndex !== -1 ? row[emailColumnIndex] : null;
+      const phoneNumber = rawPhone && isE164(String(rawPhone).trim())
+        ? String(rawPhone).trim()
+        : null;
+      const email = emailColumnIndex !== -1 ? String(row[emailColumnIndex]).trim() : null;
       return { phoneNumber, email };
     });
 
+    // Map numeric status to text values required by the API
+    const statusMapping = {
+      "1": "open",
+      "2": "confirmed",
+      "3": "canceled"
+    };
+    status = status === "all" ? "all" : (statusMapping[status] || "confirmed");
+
+    // Prepare query parameters for the FinanceAds API call
     const params = {
       api_key: envs.API_KEY,
       program_id: envs.PROGRAM_ID,
-      status,
       date_type,
       date_from,
       date_to,
+      status,
     };
-
     if (advertising_material_id) {
       params.advertising_material_id = advertising_material_id;
     }
+    console.log('FinanceAds API params:', params);
 
-    const response = await axios.get(envs.API_URL, { params });
-    let financeAdsData = response.data.data.leads;
+    // Call the FinanceAds API with proper error handling
+    let financeAdsData = [];
+    try {
+      const response = await axios.get(envs.API_URL, { params });
+      if (response.data && response.data.data && response.data.data.leads) {
+        financeAdsData = response.data.data.leads;
+      } else {
+        console.error('Unexpected API response:', response.data);
+        return NextResponse.json(
+          { error: 'Unexpected API response from FinanceAds' },
+          { status: 500 }
+        );
+      }
+      console.log("FinanceAds API returned", financeAdsData.length, "leads");
+    } catch (apiError) {
+      console.error("FinanceAds API error:", apiError.response?.data || apiError.message);
+      return NextResponse.json(
+        { error: 'Error calling FinanceAds API', details: apiError.response?.data || apiError.message },
+        { status: 500 }
+      );
+    }
 
+    // Match leads based on phone and/or email
     const uniqueMatchedLeads = new Map();
-
     financeAdsData.forEach(lead => {
       const customerPhoneNumber = lead.customer?.phone_number?.trim();
       const customerEmail = lead.customer?.email_address?.trim();
@@ -102,12 +133,12 @@ export async function POST(req) {
         use_phone &&
         customerPhoneNumber &&
         isE164(customerPhoneNumber) &&
-        excelData.some(d => d.phoneNumber && d.phoneNumber.trim() === customerPhoneNumber);
+        excelData.some(d => d.phoneNumber && d.phoneNumber === customerPhoneNumber);
 
       const emailMatch =
         use_email &&
         customerEmail &&
-        excelData.some(d => d.email && d.email.trim() === customerEmail);
+        excelData.some(d => d.email && d.email === customerEmail);
 
       if (phoneMatch || emailMatch) {
         const key = phoneMatch ? customerPhoneNumber : customerEmail;
@@ -137,7 +168,9 @@ export async function POST(req) {
     });
 
     const matchedLeads = Array.from(uniqueMatchedLeads.values());
+    console.log("Total matched leads:", matchedLeads.length);
 
+    // Create an Excel workbook with the matched leads
     const resultWorkbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
     XLSX.utils.book_append_sheet(resultWorkbook, worksheet, 'Matched Leads');
