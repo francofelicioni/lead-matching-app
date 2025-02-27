@@ -34,7 +34,7 @@ export default function DocumentationModal() {
                             <li>
                                 <strong>Upload Your Excel File:</strong> Your file must include phone numbers and/or email addresses.
                                 <br />
-                                <em>Note:</em> All phone numbers must be in the international E.164 format (e.g., <code>+491234567890</code>). Numbers not in this format are ignored.
+                                <em>Note:</em> All phone numbers must be in the international E.164 format (e.g., <code>+491234567890</code>) or without the "+" (e.g., <code>491234567890</code>). Numbers not in this format are ignored.
                             </li>
                             <li>
                                 <strong>Set the Date Range:</strong> Choose a Start Date (required) and an End Date (optional). The app filters leads based on this range.
