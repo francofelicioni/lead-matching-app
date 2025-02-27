@@ -5,7 +5,7 @@ A Next.js application that allows users to upload an Excel file, match phone num
 ## Features
 
 - Uploads an Excel file with phone numbers.
-- Matches phone numbers with data fetched from an external API.
+- Matches phone numbers / emails with data fetched from an external API.
 - Exports a downloadable report in Excel format with matched leads.
 - Built with Next.js and optimized for deployment on Vercel.
 
