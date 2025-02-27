@@ -39,6 +39,22 @@ export async function POST(req) {
       );
     }
 
+    // Normalize and map the status value to allowed API values
+    status = status.toString().toLowerCase();
+    if (status === "all") {
+      // leave as is
+    } else {
+      const statusMapping = {
+        "1": "open",
+        "2": "confirmed",
+        "3": "cancelled",
+        "open": "open",
+        "confirmed": "confirmed",
+        "canceled": "cancelled",
+      };
+      status = statusMapping[status] || "confirmed";
+    }
+
     // Read the Excel file
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -78,16 +94,6 @@ export async function POST(req) {
       const email = emailColumnIndex !== -1 ? String(row[emailColumnIndex]).trim() : null;
       return { phoneNumber, email };
     });
-
-    // Map numeric status and potential "cancelled" text to required API value.
-    const statusMapping = {
-      "1": "open",
-      "2": "confirmed",
-      "3": "cancelled",
-      "canceled": "cancelled"
-    };
-    // If "all" is selected, keep it as is.
-    status = status === "all" ? "all" : (statusMapping[status] || "confirmed");
 
     // Prepare query parameters for the FinanceAds API call
     const params = {
