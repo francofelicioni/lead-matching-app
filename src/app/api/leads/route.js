@@ -27,7 +27,7 @@ export async function POST(req) {
     const date_from = searchParams.get('date_from');
     const date_to = searchParams.get('date_to') || new Date().toISOString().split('T')[0];
     const date_type = searchParams.get('date_type') || 'processed_at';
-    let status = (searchParams.get('status') || '2').toLowerCase();
+    let status = searchParams.get('status') || '2';
     const advertising_material_id = searchParams.get('advertising_material_id');
     const use_phone = searchParams.get('use_phone') === 'true';
     const use_email = searchParams.get('use_email') === 'true';
@@ -174,7 +174,13 @@ export async function POST(req) {
 
     // Create an Excel workbook with the matched leads
     const resultWorkbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
+    let worksheet;
+    if (matchedLeads.length === 0) {
+      const message = `No matches were found for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
+      worksheet = XLSX.utils.aoa_to_sheet([[message]]);
+    } else {
+      worksheet = XLSX.utils.json_to_sheet(matchedLeads);
+    }
     XLSX.utils.book_append_sheet(resultWorkbook, worksheet, 'Matched Leads');
 
     const excelBuffer = XLSX.write(resultWorkbook, { type: 'buffer', bookType: 'xlsx' });
