@@ -13,11 +13,16 @@ export const config = {
 
 /**
  * Normalize a phone number:
+ * - Converts the input to a string and trims spaces.
+ * - Removes spaces, dashes, parentheses, and dots.
+ * - If the number doesn't start with '+':
+ *     - If it already starts with "49", simply prepends '+'.
+ *     - Otherwise, prepends the default country code "+49".
  */
 function normalizePhoneNumber(phone) {
   if (!phone) return null;
   let num = String(phone).trim();
-  // Remove common formatting characters
+  // Remove spaces, dashes, parentheses, and dots
   num = num.replace(/[\s\-().]/g, '');
   if (!num.startsWith('+')) {
     if (num.startsWith('49')) {
@@ -129,10 +134,10 @@ export async function POST(req) {
     }
     console.log('FinanceAds API params:', params);
 
-    // Call the FinanceAds API with proper error handling
+    // Increase axios timeout to 2 minutes to handle large responses when status is "all"
     let financeAdsData = [];
     try {
-      const response = await axios.get(envs.API_URL, { params });
+      const response = await axios.get(envs.API_URL, { params, timeout: 120000 });
       if (response.data && response.data.data && response.data.data.leads) {
         financeAdsData = response.data.data.leads;
       } else {
@@ -199,14 +204,14 @@ export async function POST(req) {
     const matchedLeads = Array.from(uniqueMatchedLeads.values());
     console.log("Total matched leads:", matchedLeads.length);
 
-    // Create an Excel workbook with the matched leads or a message if none found
-   const resultWorkbook = XLSX.utils.book_new();
+    // Create an Excel workbook with the matched leads or a message if none found.
+    const resultWorkbook = XLSX.utils.book_new();
     let worksheet;
     if (matchedLeads.length === 0) {
       const message = `No matches were found for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
       worksheet = XLSX.utils.aoa_to_sheet([[message]]);
     } else {
-      // Generate the sheet from the matched leads
+      // Create a sheet from matched leads
       let sheetData = XLSX.utils.sheet_to_json(XLSX.utils.json_to_sheet(matchedLeads), { header: 1 });
       // Prepend a header row with a custom message
       const headerMessage = `Matches founded for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
