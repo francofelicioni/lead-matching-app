@@ -28,7 +28,7 @@ export default function Home() {
     const today = new Date().toISOString().split('T')[0];
     setDateTo(today);
   }, []);
-
+  
   const handleLogout = async () => {
     try {
       await axios.post('/api/auth/logout');
