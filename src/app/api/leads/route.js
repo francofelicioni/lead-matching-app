@@ -9,6 +9,10 @@ export const config = {
   },
 };
 
+function isE164(phone) {
+  return /^\+[1-9]\d{1,14}$/.test(phone);
+}
+
 export async function POST(req) {
   try {
     const buffer = await req.arrayBuffer();
@@ -17,28 +21,12 @@ export async function POST(req) {
     const date_from = searchParams.get('date_from');
     const date_to = searchParams.get('date_to') || new Date().toISOString().split('T')[0];
     const date_type = searchParams.get('date_type') || 'processed_at';
-
-    function mapStatus(userStatus) {
-      switch (userStatus) {
-        case 'open':
-          return '1';
-        case 'canceled':
-          return '3';
-        case 'confirmed':
-          return '2';
-        default:
-          return null;
-      }
-    }
-
-    const userStatus = searchParams.get('status') || 'confirmed';
-    const numericStatus = mapStatus(userStatus);
-
+    // Default status to 2 (confirmed) using numeric codes: open=1, confirmed=2, canceled=3
+    const status = searchParams.get('status') || '2';
     const advertising_material_id = searchParams.get('advertising_material_id');
     const use_phone = searchParams.get('use_phone') === 'true';
     const use_email = searchParams.get('use_email') === 'true';
 
-    // Basic checks
     if (!buffer || !date_from || (!use_phone && !use_email)) {
       return NextResponse.json(
         { error: 'File, start date, and at least one matching option are required' },
@@ -46,13 +34,11 @@ export async function POST(req) {
       );
     }
 
-    // Read Excel
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     const headerRow = data[0];
 
-    // Identify phone / email columns
     const phoneHeaders = [
       'phone_number',
       'Phone_Number',
@@ -72,8 +58,8 @@ export async function POST(req) {
       'EMAIL ADDRESS',
     ];
 
-    const phoneColumnIndex = headerRow.findIndex((header) => phoneHeaders.includes(header));
-    const emailColumnIndex = headerRow.findIndex((header) => emailHeaders.includes(header));
+    const phoneColumnIndex = headerRow.findIndex(header => phoneHeaders.includes(header));
+    const emailColumnIndex = headerRow.findIndex(header => emailHeaders.includes(header));
 
     if (use_phone && phoneColumnIndex === -1 && use_email && emailColumnIndex === -1) {
       return NextResponse.json(
@@ -82,69 +68,51 @@ export async function POST(req) {
       );
     }
 
-
-    // Only match phones that are in E.164 format: + followed by digits (up to 15)
-    const isE164 = (phone) => /^\+\d{1,15}$/.test(phone);
-
-    // Extract from Excel
-    const excelData = data.slice(1).map((row) => {
-      const phoneNumber = phoneColumnIndex !== -1 ? row[phoneColumnIndex] : null;
+    // Extract and filter phone numbers that are in E.164 format
+    const excelData = data.slice(1).map(row => {
+      const rawPhone = phoneColumnIndex !== -1 ? row[phoneColumnIndex] : null;
+      const phoneNumber = rawPhone && isE164(rawPhone) ? rawPhone : null;
       const email = emailColumnIndex !== -1 ? row[emailColumnIndex] : null;
       return { phoneNumber, email };
     });
 
-    // Prepare query params
     const params = {
       api_key: envs.API_KEY,
       program_id: envs.PROGRAM_ID,
+      status,
       date_type,
       date_from,
       date_to,
     };
 
-    if (numericStatus) {
-      params.status = numericStatus;
-    }
-
     if (advertising_material_id) {
       params.advertising_material_id = advertising_material_id;
     }
 
-    // Fetch from API
     const response = await axios.get(envs.API_URL, { params });
     let financeAdsData = response.data.data.leads;
 
-    // Match
     const uniqueMatchedLeads = new Map();
 
-    financeAdsData.forEach((lead) => {
-      const customerPhone = lead.customer?.phone_number?.trim();
+    financeAdsData.forEach(lead => {
+      const customerPhoneNumber = lead.customer?.phone_number?.trim();
       const customerEmail = lead.customer?.email_address?.trim();
 
       const phoneMatch =
         use_phone &&
-        customerPhone &&
-        isE164(customerPhone) &&
-        excelData.some(
-          (rowData) =>
-            rowData.phoneNumber &&
-            isE164(rowData.phoneNumber.toString().trim()) &&
-            rowData.phoneNumber.toString().trim() === customerPhone
-        );
+        customerPhoneNumber &&
+        isE164(customerPhoneNumber) &&
+        excelData.some(d => d.phoneNumber && d.phoneNumber.trim() === customerPhoneNumber);
 
       const emailMatch =
         use_email &&
         customerEmail &&
-        excelData.some(
-          (rowData) =>
-            rowData.email &&
-            rowData.email.toString().trim() === customerEmail
-        );
+        excelData.some(d => d.email && d.email.trim() === customerEmail);
 
       if (phoneMatch || emailMatch) {
-        const key = phoneMatch ? customerPhone : customerEmail;
+        const key = phoneMatch ? customerPhoneNumber : customerEmail;
         uniqueMatchedLeads.set(key, {
-          customer_phone_number: customerPhone,
+          customer_phone_number: customerPhoneNumber,
           customer_email_address: customerEmail,
           created_at: lead.created_at,
           processed_at: lead.processed_at,
@@ -170,7 +138,6 @@ export async function POST(req) {
 
     const matchedLeads = Array.from(uniqueMatchedLeads.values());
 
-    // Convert to Excel
     const resultWorkbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(matchedLeads.length ? matchedLeads : [{}]);
     XLSX.utils.book_append_sheet(resultWorkbook, worksheet, 'Matched Leads');
