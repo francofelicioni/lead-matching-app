@@ -10,6 +10,19 @@ export const config = {
   },
 };
 
+function mapStatus(userStatus) {
+  switch (userStatus) {
+    case 'open':
+      return '1';
+    case 'canceled':
+      return '3';
+    case 'confirmed':
+      return '2';
+    default:
+      return null;
+  }
+}
+
 /**
  * Normalize a phone number:
  */
@@ -26,6 +39,11 @@ function normalizePhoneNumber(phone) {
     }
   }
   return num;
+}
+
+// Validate that a phone number is in E.164 format (e.g. +491234567890)
+function isE164(phone) {
+  return /^\+[1-9]\d{1,14}$/.test(phone);
 }
 
 export async function POST(req) {
@@ -194,7 +212,7 @@ export async function POST(req) {
     console.log("Total matched leads:", matchedLeads.length);
 
     // Create an Excel workbook with the matched leads or a message if none found
-    const resultWorkbook = XLSX.utils.book_new();
+   const resultWorkbook = XLSX.utils.book_new();
     let worksheet;
     if (matchedLeads.length === 0) {
       const message = `No matches were found for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
