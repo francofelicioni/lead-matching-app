@@ -45,9 +45,9 @@ export async function POST(req) {
       // leave as is
     } else {
       const statusMapping = {
-        "1": "open",
-        "2": "confirmed",
-        "3": "cancelled",
+        "open": "1",
+        "confirmed": "2",
+        "cancelled": "3",
         "cancelled": "cancelled",
         "canceled": "cancelled",
         "open": "open",
