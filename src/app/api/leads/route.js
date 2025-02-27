@@ -10,18 +10,6 @@ export const config = {
   },
 };
 
-function mapStatus(userStatus) {
-  switch (userStatus) {
-    case 'open':
-      return '1';
-    case 'canceled':
-      return '3';
-    case 'confirmed':
-      return '2';
-    default:
-      return null;
-  }
-}
 
 /**
  * Normalize a phone number:
