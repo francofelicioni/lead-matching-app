@@ -10,7 +10,7 @@ export const config = {
   },
 };
 
-// Validate that a phone number is in E.164 format
+// Validate that a phone number is in E.164 format (e.g. +491234567890)
 function isE164(phone) {
   return /^\+[1-9]\d{1,14}$/.test(phone);
 }
@@ -27,7 +27,7 @@ export async function POST(req) {
     const date_from = searchParams.get('date_from');
     const date_to = searchParams.get('date_to') || new Date().toISOString().split('T')[0];
     const date_type = searchParams.get('date_type') || 'processed_at';
-    let status = searchParams.get('status') || '2';
+    let status = (searchParams.get('status') || '2').toLowerCase();
     const advertising_material_id = searchParams.get('advertising_material_id');
     const use_phone = searchParams.get('use_phone') === 'true';
     const use_email = searchParams.get('use_email') === 'true';
@@ -79,12 +79,14 @@ export async function POST(req) {
       return { phoneNumber, email };
     });
 
-    // Map numeric status to text values required by the API
+    // Map numeric status and potential "cancelled" text to required API value.
     const statusMapping = {
       "1": "open",
       "2": "confirmed",
-      "3": "canceled"
+      "3": "cancelled",
+      "canceled": "cancelled"
     };
+    // If "all" is selected, keep it as is.
     status = status === "all" ? "all" : (statusMapping[status] || "confirmed");
 
     // Prepare query parameters for the FinanceAds API call
