@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import DocumentationModal from '@/components/DocumentalModel.js';
 
 export default function Home() {
   const router = useRouter();
@@ -105,6 +106,7 @@ export default function Home() {
         />
       </a>
       <h1 className="text-center text-3xl font-bold mb-6 py-4 text-white">Lead Matching App</h1>
+      <DocumentationModal />
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4 w-full max-w-md">
         <div>
           <label className="block text-gray-700 font-medium mb-2" htmlFor="file">
@@ -171,7 +173,7 @@ export default function Home() {
             <option value="all">All</option>
             <option value="1">Open</option>
             <option value="2">Confirmed</option>
-            <option value="3">Cancelled</option>
+            <option value="3">Canceled</option>
           </select>
         </div>
         <div>
