@@ -9,7 +9,7 @@ export const config = {
     bodyParser: false,
   },
 };
-e
+
 // Validate that a phone number is in E.164 format
 function isE164(phone) {
   return /^\+[1-9]\d{1,14}$/.test(phone);
@@ -27,7 +27,7 @@ export async function POST(req) {
     const date_from = searchParams.get('date_from');
     const date_to = searchParams.get('date_to') || new Date().toISOString().split('T')[0];
     const date_type = searchParams.get('date_type') || 'processed_at';
-    let status = searchParams.get('status') || '2'; // default is "2" (Confirmed)
+    let status = searchParams.get('status') || '2';
     const advertising_material_id = searchParams.get('advertising_material_id');
     const use_phone = searchParams.get('use_phone') === 'true';
     const use_email = searchParams.get('use_email') === 'true';
