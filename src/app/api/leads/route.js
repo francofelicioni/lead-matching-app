@@ -134,10 +134,10 @@ export async function POST(req) {
     }
     console.log('FinanceAds API params:', params);
 
-    // Increase axios timeout to 2 minutes to handle large responses when status is "all"
+    // Axios timeout is set to 4 minutes to handle large responses when status is "all"
     let financeAdsData = [];
     try {
-      const response = await axios.get(envs.API_URL, { params, timeout: 120000 });
+      const response = await axios.get(envs.API_URL, { params, timeout: 240000 });
       if (response.data && response.data.data && response.data.data.leads) {
         financeAdsData = response.data.data.leads;
       } else {
