@@ -39,7 +39,7 @@ export async function POST(req) {
       );
     }
 
-    // Normalize and map the status value to allowed API values
+    // Normalize and map the status value to allowed API values.
     status = status.toString().toLowerCase();
     if (status === "all") {
       // leave as is
@@ -48,9 +48,10 @@ export async function POST(req) {
         "1": "open",
         "2": "confirmed",
         "3": "cancelled",
-        "open": "open",
-        "confirmed": "confirmed",
+        "cancelled": "cancelled",
         "canceled": "cancelled",
+        "open": "open",
+        "confirmed": "confirmed"
       };
       status = statusMapping[status] || "confirmed";
     }
@@ -178,7 +179,7 @@ export async function POST(req) {
     const matchedLeads = Array.from(uniqueMatchedLeads.values());
     console.log("Total matched leads:", matchedLeads.length);
 
-    // Create an Excel workbook with the matched leads
+    // Create an Excel workbook with the matched leads or a message if none found
     const resultWorkbook = XLSX.utils.book_new();
     let worksheet;
     if (matchedLeads.length === 0) {
