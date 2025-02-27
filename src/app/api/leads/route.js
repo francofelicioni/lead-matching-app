@@ -11,42 +11,12 @@ export const config = {
 };
 
 /**
- * Maps a user-provided status (either numeric or text) to the API-expected string.
- * It returns:
- *   "open" for "1" or "open"
- *   "confirmed" for "2" or "confirmed"
- *   "cancelled" for "3", "canceled", or "cancelled"
- */
-function mapStatus(userStatus) {
-  userStatus = userStatus.toString().toLowerCase();
-  switch (userStatus) {
-    case '1':
-    case 'open':
-      return 'open';
-    case '2':
-    case 'confirmed':
-      return 'confirmed';
-    case '3':
-    case 'canceled':
-    case 'cancelled':
-      return 'cancelled';
-    default:
-      return null;
-  }
-}
-
-/**
  * Normalize a phone number:
- * - Converts the input to a string and trims spaces.
- * - Removes spaces, dashes, parentheses, and dots.
- * - If the number doesn't start with '+':
- *     - If it already starts with "49", simply prepends '+'.
- *     - Otherwise, prepends the default country code "+49".
  */
 function normalizePhoneNumber(phone) {
   if (!phone) return null;
   let num = String(phone).trim();
-  // Remove spaces, dashes, parentheses, and dots
+  // Remove common formatting characters
   num = num.replace(/[\s\-().]/g, '');
   if (!num.startsWith('+')) {
     if (num.startsWith('49')) {
@@ -56,11 +26,6 @@ function normalizePhoneNumber(phone) {
     }
   }
   return num;
-}
-
-// Validate that a phone number is in E.164 format (e.g. +491234567890)
-function isE164(phone) {
-  return /^\+[1-9]\d{1,14}$/.test(phone);
 }
 
 export async function POST(req) {
@@ -87,12 +52,24 @@ export async function POST(req) {
       );
     }
 
-    // Normalize and map the status value using mapStatus (unless it's "all")
+    // Normalize and map the status value to allowed API values.
+    // The FinanceAds API expects: "open", "confirmed", "cancelled", or "all".
     status = status.toString().toLowerCase();
-    if (status !== "all") {
-      status = mapStatus(status) || "confirmed";
+    if (status === "all") {
+      // leave as is
+    } else {
+      const statusMapping = {
+        "1": "open",
+        "2": "confirmed",
+        "3": "cancelled",
+        "cancelled": "cancelled",
+        "canceled": "cancelled",
+        "open": "open",
+        "confirmed": "confirmed"
+      };
+      status = statusMapping[status] || "confirmed";
     }
-    
+
     // Read the Excel file
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -126,6 +103,7 @@ export async function POST(req) {
     // Extract and normalize Excel data
     const excelData = data.slice(1).map(row => {
       const rawPhone = phoneColumnIndex !== -1 ? row[phoneColumnIndex] : null;
+      // Normalize Excel phone numbers (adds '+' if missing)
       const phoneNumber = rawPhone ? normalizePhoneNumber(rawPhone) : null;
       const email = emailColumnIndex !== -1 ? String(row[emailColumnIndex]).trim() : null;
       return { phoneNumber, email };
@@ -215,16 +193,17 @@ export async function POST(req) {
     const matchedLeads = Array.from(uniqueMatchedLeads.values());
     console.log("Total matched leads:", matchedLeads.length);
 
-    // Create an Excel workbook with the matched leads or a message if none found.
+    // Create an Excel workbook with the matched leads or a message if none found
     const resultWorkbook = XLSX.utils.book_new();
     let worksheet;
     if (matchedLeads.length === 0) {
       const message = `No matches were found for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
       worksheet = XLSX.utils.aoa_to_sheet([[message]]);
     } else {
-      // Convert the matched leads to a sheet and prepend a header row with a custom message.
+      // Generate the sheet from the matched leads
       let sheetData = XLSX.utils.sheet_to_json(XLSX.utils.json_to_sheet(matchedLeads), { header: 1 });
-      const headerMessage = `Matches found for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
+      // Prepend a header row with a custom message
+      const headerMessage = `Matches founded for ${date_from} to ${date_to} with a status of ${status}${advertising_material_id ? ` and advertising material ID ${advertising_material_id}` : ''}.`;
       sheetData.unshift([headerMessage]);
       worksheet = XLSX.utils.aoa_to_sheet(sheetData);
     }
